@@ -4,7 +4,7 @@ from app.db.base import Base
 from app.models import *
 
 # Usa psycopg2 normal en lugar de asyncpg
-DATABASE_URL = "postgresql://postgres:WakamoleMerequetengue@localhost:5432/lynxview_db"
+DATABASE_URL = "postgresql://postgres:1234@localhost:5432/lynxview_db"
 
 def init_db():
     engine = create_engine(DATABASE_URL)

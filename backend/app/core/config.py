@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 días
     
     # Base de datos
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:WakamoleMerequetengue@localhost:5432/lynxview_db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:1234@localhost:5432/lynxview_db"
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]

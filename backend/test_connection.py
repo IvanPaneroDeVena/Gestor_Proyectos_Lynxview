@@ -6,7 +6,7 @@ async def test_connection():
         # Intenta conectar directamente con asyncpg
         conn = await asyncpg.connect(
             user='postgres',
-            password='WakamoleMerequetengue',  # CAMBIA ESTO
+            password='1234',  # CAMBIA ESTO
             database='lynxview_db',
             host='localhost',
             port=5432
