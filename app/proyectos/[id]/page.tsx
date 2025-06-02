@@ -1,341 +1,440 @@
-import Link from "next/link"
-import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  Edit,
-  FileText,
-  MessageSquare,
-  Plus,
-  Code,
-  Database,
-  Globe,
-  Server,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ProjectTasksTable } from "@/components/project-tasks-table"
-import { Separator } from "@/components/ui/separator"
+'use client'
 
-export default function ProyectoDetallePage({ params }: { params: { id: string } }) {
-  // En una aplicación real, aquí cargaríamos los datos del proyecto desde una API o base de datos
-  const proyecto = {
-    id: params.id,
-    nombre: "AYR sistema de domótica",
-    descripcion:
-      "Sistema de domótica para abrir puertas con reconocimiento facial y control remoto. El proyecto incluye desarrollo de hardware, software de control y aplicación móvil para gestión de accesos.",
-    estado: "En progreso",
-    progreso: 75,
-    fechaInicio: "01/01/2025",
-    fechaFin: "15/06/2025",
-    prioridad: "Alta",
-    cliente: "Empresa AYR",
-    presupuesto: "€60,000",
-    horasEstimadas: 1200,
-    horasRegistradas: 900,
-    technologies: {
-      frontend: ["React", "TypeScript", "Tailwind CSS", "Redux"],
-      backend: ["Node.js", "Express", "WebSockets"],
-      database: ["MongoDB", "Redis"],
-      other: ["Arduino", "Raspberry Pi", "JWT", "Docker"],
-    },
-    equipo: [
-      {
-        nombre: "Ana Martínez",
-        rol: "Desarrolladora Frontend (React)",
-        avatar: "/placeholder.svg?height=40&width=40",
-        technologies: ["React", "TypeScript", "Tailwind CSS", "Redux"],
-      },
-      {
-        nombre: "Carlos Ruiz",
-        rol: "Desarrollador Backend (Node.js)",
-        avatar: "/placeholder.svg?height=40&width=40",
-        technologies: ["Node.js", "Express", "MongoDB", "WebSockets"],
-      },
-      {
-        nombre: "Elena Gómez",
-        rol: "Diseñadora UX/UI (Figma)",
-        avatar: "/placeholder.svg?height=40&width=40",
-        technologies: ["Figma", "Adobe XD", "HTML/CSS"],
-      },
-      {
-        nombre: "Javier López",
-        rol: "DevOps (Docker)",
-        avatar: "/placeholder.svg?height=40&width=40",
-        technologies: ["Docker", "CI/CD", "AWS", "Kubernetes"],
-      },
-      {
-        nombre: "Laura Sánchez",
-        rol: "QA Tester (Cypress)",
-        avatar: "/placeholder.svg?height=40&width=40",
-        technologies: ["Cypress", "Jest", "Selenium", "Postman"],
-      },
-    ],
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
+import { 
+  ArrowLeft, 
+  Edit, 
+  Trash2, 
+  Calendar, 
+  DollarSign, 
+  Clock, 
+  User, 
+  Users,
+  AlertTriangle,
+  Loader2
+} from 'lucide-react'
+import { apiClient } from '@/lib/api/client'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+
+const statusColors = {
+  planning: 'bg-blue-100 text-blue-800',
+  active: 'bg-green-100 text-green-800',
+  on_hold: 'bg-yellow-100 text-yellow-800',
+  completed: 'bg-gray-100 text-gray-800',
+  cancelled: 'bg-red-100 text-red-800'
+}
+
+const statusLabels = {
+  planning: 'Planificación',
+  active: 'Activo',
+  on_hold: 'En Pausa',
+  completed: 'Completado',
+  cancelled: 'Cancelado'
+}
+
+export default function ProjectDetailsPage() {
+  const params = useParams()
+  const router = useRouter()
+  const projectId = parseInt(params.id as string)
+  
+  const [project, setProject] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Cargar detalles del proyecto
+  const loadProject = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      console.log('📋 Cargando detalles del proyecto:', projectId)
+      const projectData = await apiClient.getProject(projectId)
+      console.log('✅ Proyecto cargado:', projectData)
+      
+      setProject(projectData)
+      
+    } catch (error) {
+      console.error('❌ Error cargando proyecto:', error)
+      setError(`No se pudo cargar el proyecto: ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  return (
-    <div className="flex flex-col gap-8 p-8">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
+  useEffect(() => {
+    if (projectId) {
+      loadProject()
+    }
+  }, [projectId])
+
+  // Función para eliminar proyecto
+  const handleDeleteProject = async () => {
+    try {
+      setDeleting(true)
+      
+      console.log('🗑️ Eliminando proyecto:', projectId)
+      await apiClient.deleteProject(projectId)
+      
+      console.log('✅ Proyecto eliminado, redirigiendo...')
+      router.push('/proyectos')
+      
+    } catch (error) {
+      console.error('❌ Error eliminando proyecto:', error)
+      setError(`Error al eliminar el proyecto: ${error.message}`)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Calcular progreso basado en fechas
+  const calculateProgress = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) return 0
+    
+    const now = new Date()
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (now < start) return 0
+    if (now > end) return 100
+    
+    const totalDuration = end.getTime() - start.getTime()
+    const elapsed = now.getTime() - start.getTime()
+    
+    return Math.round((elapsed / totalDuration) * 100)
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-'
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return '-'
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+          <span className="ml-2 text-lg">Cargando proyecto...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !project) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center mb-6">
           <Link href="/proyectos">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Volver</span>
+            <Button variant="outline" size="sm" className="mr-4">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
           </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight gradient-text">{proyecto.nombre}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge>{proyecto.estado}</Badge>
-            <span className="text-sm text-muted-foreground">ID: {proyecto.id}</span>
+          <h1 className="text-2xl font-bold">Error</h1>
+        </div>
+        
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="text-red-800">
+              {error || 'Proyecto no encontrado'}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const progress = calculateProgress(project.start_date, project.end_date)
+
+  return (
+    <div className="container mx-auto py-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center">
+          <Link href="/proyectos">
+            <Button variant="outline" size="sm" className="mr-4">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+            <p className="text-muted-foreground">
+              Detalles del proyecto
+            </p>
           </div>
         </div>
-        <Button className="bg-purple-700 hover:bg-purple-800 text-white font-medium shadow-md">
-          <Edit className="mr-2 h-4 w-4" /> Editar Proyecto
-        </Button>
+        
+        <div className="flex gap-2">
+          <Link href={`/proyectos/${project.id}/editar`}>
+            <Button variant="outline">
+              <Edit className="h-4 w-4 mr-2" />
+              Editar
+            </Button>
+          </Link>
+          
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="text-red-600 hover:text-red-700">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-red-500" />
+                  ¿Eliminar proyecto?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  ¿Estás seguro de que quieres eliminar el proyecto "<strong>{project.name}</strong>"? 
+                  Esta acción no se puede deshacer y se eliminarán todos los datos asociados.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteProject}
+                  className="bg-red-600 hover:bg-red-700"
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    'Eliminar'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Información del Proyecto</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h3 className="font-medium mb-2">Descripción</h3>
-              <p className="text-sm text-muted-foreground">{proyecto.descripcion}</p>
-            </div>
-
-            <div>
-              <h3 className="font-medium mb-3">Tecnologías</h3>
+        {/* Información Principal */}
+        <div className="md:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Información General</CardTitle>
+                <Badge 
+                  className={statusColors[project.status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800'}
+                >
+                  {statusLabels[project.status as keyof typeof statusLabels] || project.status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {project.description && (
+                <div>
+                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Descripción</h4>
+                  <p className="text-sm">{project.description}</p>
+                </div>
+              )}
+              
+              <Separator />
+              
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-blue-500" />
-                    <span className="font-medium text-sm">Frontend</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {proyecto.technologies.frontend.map((tech, index) => (
-                      <Badge key={index} variant="outline" className="bg-blue-50">
-                        {tech}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Code className="h-4 w-4 text-green-500" />
-                    <span className="font-medium text-sm">Backend</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {proyecto.technologies.backend.map((tech, index) => (
-                      <Badge key={index} variant="outline" className="bg-green-50">
-                        {tech}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4 text-purple-500" />
-                    <span className="font-medium text-sm">Base de datos</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {proyecto.technologies.database.map((tech, index) => (
-                      <Badge key={index} variant="outline" className="bg-purple-50">
-                        {tech}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-orange-500" />
-                    <span className="font-medium text-sm">Otras tecnologías</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {proyecto.technologies.other.map((tech, index) => (
-                      <Badge key={index} variant="outline" className="bg-orange-50">
-                        {tech}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <h3 className="font-medium mb-2">Detalles</h3>
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Cliente:</dt>
-                    <dd>{proyecto.cliente}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Prioridad:</dt>
-                    <dd>{proyecto.prioridad}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Presupuesto:</dt>
-                    <dd>{proyecto.presupuesto}</dd>
-                  </div>
-                </dl>
-              </div>
-              <div>
-                <h3 className="font-medium mb-2">Fechas</h3>
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Fecha de inicio:</dt>
-                    <dd>{proyecto.fechaInicio}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Fecha límite:</dt>
-                    <dd>{proyecto.fechaFin}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Duración:</dt>
-                    <dd>165 días</dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium">Progreso</h3>
-                <span className="text-sm font-medium">{proyecto.progreso}%</span>
-              </div>
-              <Progress value={proyecto.progreso} className="h-2" />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex items-center gap-4 rounded-lg border p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple to-brand-blue text-white">
-                  <Clock className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold">{proyecto.horasRegistradas}</div>
-                  <div className="text-sm text-muted-foreground">Horas registradas</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 rounded-lg border p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-blue to-brand-cyan text-white">
-                  <FileText className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <div className="text-xl font-bold">24</div>
-                  <div className="text-sm text-muted-foreground">Tareas totales</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Equipo del Proyecto</CardTitle>
-            <CardDescription>{proyecto.equipo.length} miembros asignados</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between">
-              <Button variant="outline" size="sm">
-                Ver todos
-              </Button>
-              <Button size="sm">
-                <Plus className="mr-1 h-3 w-3" /> Añadir
-              </Button>
-            </div>
-            <div className="space-y-4">
-              {proyecto.equipo.map((miembro, index) => (
-                <div key={index} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage src={miembro.avatar || "/placeholder.svg"} alt={miembro.nombre} />
-                      <AvatarFallback>
-                        {miembro.nombre
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="font-medium">{miembro.nombre}</div>
-                      <div className="text-xs text-muted-foreground">{miembro.rol}</div>
-                    </div>
-                  </div>
-                  <div className="ml-9">
-                    <div className="flex flex-wrap gap-1">
-                      {miembro.technologies.slice(0, 3).map((tech, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs bg-blue-50">
-                          {tech}
-                        </Badge>
-                      ))}
-                      {miembro.technologies.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{miembro.technologies.length - 3}
-                        </Badge>
-                      )}
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium">Cliente</div>
+                    <div className="text-sm text-muted-foreground">
+                      {project.client_name || 'No especificado'}
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium">Presupuesto</div>
+                    <div className="text-sm text-muted-foreground">
+                      {project.budget ? formatCurrency(project.budget) : 'No especificado'}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium">Tarifa por hora</div>
+                    <div className="text-sm text-muted-foreground">
+                      {project.hourly_rate ? `${formatCurrency(project.hourly_rate)}/h` : 'No especificado'}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium">Fecha de creación</div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDateTime(project.created_at)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Progreso del Proyecto */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Progreso del Proyecto</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Progreso estimado</span>
+                <span className="text-sm text-muted-foreground">{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+              
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <div className="text-sm font-medium">Fecha de inicio</div>
+                  <div className="text-sm text-muted-foreground">
+                    {formatDate(project.start_date)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Fecha de finalización</div>
+                  <div className="text-sm text-muted-foreground">
+                    {formatDate(project.end_date)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Equipo del Proyecto */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Equipo del Proyecto
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {project.members && project.members.length > 0 ? (
+                <div className="space-y-3">
+                  {project.members.map((member: any) => (
+                    <div key={member.id} className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={member.avatar} alt={member.name} />
+                        <AvatarFallback>
+                          {member.name?.split(' ').map((n: string) => n[0]).join('') || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{member.name}</div>
+                        <div className="text-xs text-muted-foreground">{member.role}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No hay miembros asignados
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tecnologías */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tecnologías</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {project.technologies && project.technologies.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {project.technologies.map((tech: any) => (
+                    <Badge key={tech.id} variant="secondary">
+                      {tech.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No hay tecnologías especificadas
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Estadísticas */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Estadísticas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm">Tareas totales</span>
+                <span className="text-sm font-medium">
+                  {project.tasks?.length || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm">Tiempo registrado</span>
+                <span className="text-sm font-medium">
+                  {project.time_entries?.length || 0} entradas
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm">Facturas</span>
+                <span className="text-sm font-medium">
+                  {project.invoices?.length || 0}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      <Tabs defaultValue="tareas" className="w-full">
-        <TabsList>
-          <TabsTrigger value="tareas">Tareas</TabsTrigger>
-          <TabsTrigger value="archivos">Archivos</TabsTrigger>
-          <TabsTrigger value="comentarios">Comentarios</TabsTrigger>
-          <TabsTrigger value="actividad">Actividad</TabsTrigger>
-        </TabsList>
-        <TabsContent value="tareas" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Tareas del Proyecto</h2>
-            <Button className="bg-purple-700 hover:bg-purple-800 text-white font-medium shadow-sm">
-              <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
-            </Button>
-          </div>
-          <ProjectTasksTable projectId={params.id} />
-        </TabsContent>
-        <TabsContent value="archivos">
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">No hay archivos todavía</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">Sube archivos relacionados con este proyecto</p>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> Subir Archivos
-            </Button>
-          </div>
-        </TabsContent>
-        <TabsContent value="comentarios">
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">No hay comentarios todavía</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">Inicia una conversación sobre este proyecto</p>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> Añadir Comentario
-            </Button>
-          </div>
-        </TabsContent>
-        <TabsContent value="actividad">
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">Historial de actividad</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Aquí se mostrará el historial de actividad del proyecto
-            </p>
-          </div>
-        </TabsContent>
-      </Tabs>
     </div>
   )
 }

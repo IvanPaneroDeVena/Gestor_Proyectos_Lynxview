@@ -117,6 +117,12 @@ class ApiClient {
     })
   }
 
+  async deleteUser(id: number) {
+    return this.request(`/api/users/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
   // Métodos para Tareas
   async getTasks(params?: {
     skip?: number
@@ -140,6 +146,10 @@ class ApiClient {
     return this.request(`/api/tasks${query ? `?${query}` : ''}`)
   }
 
+  async getTask(id: number) {
+    return this.request(`/api/tasks/${id}`)
+  }
+
   async createTask(data: any) {
     return this.request('/api/tasks', {
       method: 'POST',
@@ -151,6 +161,12 @@ class ApiClient {
     return this.request(`/api/tasks/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    })
+  }
+
+  async deleteTask(id: number) {
+    return this.request(`/api/tasks/${id}`, {
+      method: 'DELETE',
     })
   }
 
@@ -173,6 +189,10 @@ class ApiClient {
     return this.request(`/api/invoices${query ? `?${query}` : ''}`)
   }
 
+  async getInvoice(id: number) {
+    return this.request(`/api/invoices/${id}`)
+  }
+
   async createInvoice(data: any) {
     return this.request('/api/invoices', {
       method: 'POST',
@@ -180,8 +200,21 @@ class ApiClient {
     })
   }
 
+  async updateInvoice(id: number, data: any) {
+    return this.request(`/api/invoices/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteInvoice(id: number) {
+    return this.request(`/api/invoices/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
   // Métodos para Tecnologías
-  async getTechnologies(params?: {
+  async get_technologies(params?: {
     skip?: number
     limit?: number
     category?: string
@@ -195,6 +228,38 @@ class ApiClient {
     
     const query = searchParams.toString()
     return this.request(`/api/technologies${query ? `?${query}` : ''}`)
+  }
+
+  async get_technology(id: number) {
+    return this.request(`/api/technologies/${id}`)
+  }
+
+  async create_technology(data: {
+    name: string
+    category: string
+    description?: string
+  }) {
+    return this.request('/api/technologies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async update_technology(id: number, data: {
+    name?: string
+    category?: string
+    description?: string
+  }) {
+    return this.request(`/api/technologies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async delete_technology(id: number) {
+    return this.request(`/api/technologies/${id}`, {
+      method: 'DELETE',
+    })
   }
 
   // Métodos para Entradas de Tiempo
@@ -222,6 +287,30 @@ class ApiClient {
     
     const query = searchParams.toString()
     return this.request(`/api/time-entries${query ? `?${query}` : ''}`)
+  }
+
+  async getTimeEntry(id: number) {
+    return this.request(`/api/time-entries/${id}`)
+  }
+
+  async createTimeEntry(data: any) {
+    return this.request('/api/time-entries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateTimeEntry(id: number, data: any) {
+    return this.request(`/api/time-entries/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteTimeEntry(id: number) {
+    return this.request(`/api/time-entries/${id}`, {
+      method: 'DELETE',
+    })
   }
 }
 
