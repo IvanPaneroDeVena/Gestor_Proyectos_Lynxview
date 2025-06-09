@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Optional
-from app.db.base import get_db
-from app.models import Project
+from typing import Optional
+from app.services.project_service import ProjectService
+from app.dependencies import get_project_service
 from app.schemas.project import (
     Project as ProjectSchema,
     ProjectCreate,
     ProjectUpdate,
     ProjectList
 )
+from app.exceptions import NotFoundException, ValidationException
 
 router = APIRouter()
 
@@ -19,154 +18,77 @@ async def get_projects(
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = None,
     search: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    project_service: ProjectService = Depends(get_project_service)
 ):
-    """
-    Obtener lista de proyectos con paginación y filtros
-    """
-    # Query base
-    query = select(Project)
-    count_query = select(func.count(Project.id))
-    
-    # Aplicar filtros
-    if status:
-        query = query.where(Project.status == status)
-        count_query = count_query.where(Project.status == status)
-    
-    if search:
-        search_filter = f"%{search}%"
-        query = query.where(
-            (Project.name.ilike(search_filter)) |
-            (Project.client_name.ilike(search_filter))
+    """Obtener lista de proyectos con filtros"""
+    try:
+        return await project_service.search_projects(
+            search=search,
+            status=status,
+            skip=skip,
+            limit=limit
         )
-        count_query = count_query.where(
-            (Project.name.ilike(search_filter)) |
-            (Project.client_name.ilike(search_filter))
-        )
-    
-    # Obtener total
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Aplicar paginación
-    query = query.offset(skip).limit(limit).order_by(Project.created_at.desc())
-    
-    # Ejecutar query
-    result = await db.execute(query)
-    projects = result.scalars().all()
-    
-    return ProjectList(
-        total=total,
-        projects=[
-            ProjectSchema(
-                **project.__dict__,
-                members=[],
-                technologies=[],
-                total_hours=0,
-                total_invoiced=0
-            ) for project in projects
-        ]
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=ProjectSchema)
 async def create_project(
     project_in: ProjectCreate,
-    db: AsyncSession = Depends(get_db)
+    project_service: ProjectService = Depends(get_project_service)
 ):
-    """
-    Crear un nuevo proyecto
-    """
-    # Crear instancia del proyecto
-    project = Project(**project_in.model_dump(exclude={'member_ids', 'technology_ids'}))
-    
-    # TODO: Agregar miembros y tecnologías si se proporcionan
-    
-    db.add(project)
-    await db.commit()
-    await db.refresh(project)
-    
-    return ProjectSchema(
-        **project.__dict__,
-        members=[],
-        technologies=[],
-        total_hours=0,
-        total_invoiced=0
-    )
+    """Crear un nuevo proyecto"""
+    try:
+        return await project_service.create_project(project_in)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{project_id}", response_model=ProjectSchema)
 async def get_project(
     project_id: int,
-    db: AsyncSession = Depends(get_db)
+    project_service: ProjectService = Depends(get_project_service)
 ):
-    """
-    Obtener un proyecto por ID
-    """
-    result = await db.execute(
-        select(Project).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    
-    return ProjectSchema(
-        **project.__dict__,
-        members=[],
-        technologies=[],
-        total_hours=0,
-        total_invoiced=0
-    )
+    """Obtener un proyecto por ID"""
+    try:
+        project = await project_service.get_project_with_details(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        return project
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{project_id}", response_model=ProjectSchema)
 async def update_project(
     project_id: int,
     project_update: ProjectUpdate,
-    db: AsyncSession = Depends(get_db)
+    project_service: ProjectService = Depends(get_project_service)
 ):
-    """
-    Actualizar un proyecto
-    """
-    result = await db.execute(
-        select(Project).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    
-    # Actualizar campos
-    update_data = project_update.model_dump(exclude_unset=True, exclude={'member_ids', 'technology_ids'})
-    for field, value in update_data.items():
-        setattr(project, field, value)
-    
-    await db.commit()
-    await db.refresh(project)
-    
-    return ProjectSchema(
-        **project.__dict__,
-        members=[],
-        technologies=[],
-        total_hours=0,
-        total_invoiced=0
-    )
+    """Actualizar un proyecto"""
+    try:
+        updated_project = await project_service.update_project(project_id, project_update)
+        return updated_project
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: int,
-    db: AsyncSession = Depends(get_db)
+    project_service: ProjectService = Depends(get_project_service)
 ):
-    """
-    Eliminar un proyecto
-    """
-    result = await db.execute(
-        select(Project).where(Project.id == project_id)
-    )
-    project = result.scalar_one_or_none()
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    
-    await db.delete(project)
-    await db.commit()
-    
-    return {"message": "Proyecto eliminado exitosamente"}
+    """Eliminar un proyecto"""
+    try:
+        success = await project_service.delete_project(project_id)
+        return {"message": "Proyecto eliminado exitosamente"}
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

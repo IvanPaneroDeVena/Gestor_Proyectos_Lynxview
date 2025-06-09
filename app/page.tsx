@@ -45,7 +45,7 @@ export default function Home() {
         <div className="col-span-full lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold">Proyectos Recientes</h2>
-            <Link href="/proyectos/nuevo" passHref>
+            <Link href="/proyectos" passHref>
               <Button variant="ghost" size="sm" className="gap-1">
                 Ver todos <ArrowRight className="h-4 w-4" />
               </Button>

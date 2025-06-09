@@ -1,16 +1,14 @@
-# backend/app/api/endpoints/users.py
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Optional
-from app.db.base import get_db
-from app.models import User
+from typing import Optional
+from app.services.user_service import UserService
+from app.dependencies import get_user_service
 from app.schemas.user import (
     User as UserSchema,
     UserCreate,
     UserUpdate,
     UserList
 )
+from app.exceptions import NotFoundException, ValidationException
 
 router = APIRouter()
 
@@ -20,169 +18,75 @@ async def get_users(
     limit: int = Query(10, ge=1, le=100),
     role: Optional[str] = None,
     search: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    is_active: Optional[bool] = None,
+    user_service: UserService = Depends(get_user_service)
 ):
-    """
-    Obtener lista de usuarios con paginación y filtros
-    """
-    # Query base
-    query = select(User)
-    count_query = select(func.count(User.id))
-    
-    # Aplicar filtros
-    if role:
-        query = query.where(User.role == role)
-        count_query = count_query.where(User.role == role)
-    
-    if search:
-        search_filter = f"%{search}%"
-        query = query.where(
-            (User.full_name.ilike(search_filter)) |
-            (User.email.ilike(search_filter)) |
-            (User.username.ilike(search_filter))
+    """Obtener lista de usuarios con filtros"""
+    try:
+        return await user_service.search_users(
+            search=search,
+            role=role,
+            is_active=is_active,
+            skip=skip,
+            limit=limit
         )
-        count_query = count_query.where(
-            (User.full_name.ilike(search_filter)) |
-            (User.email.ilike(search_filter)) |
-            (User.username.ilike(search_filter))
-        )
-    
-    # Obtener total
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Aplicar paginación
-    query = query.offset(skip).limit(limit).order_by(User.created_at.desc())
-    
-    # Ejecutar query
-    result = await db.execute(query)
-    users = result.scalars().all()
-    
-    return UserList(
-        total=total,
-        users=[
-            UserSchema(
-                **user.__dict__,
-                current_projects=[]  # TODO: agregar proyectos actuales
-            ) for user in users
-        ]
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=UserSchema)
 async def create_user(
     user_in: UserCreate,
-    db: AsyncSession = Depends(get_db)
+    user_service: UserService = Depends(get_user_service)
 ):
-    """
-    Crear un nuevo usuario
-    """
-    # Verificar que email y username sean únicos
-    existing_email = await db.execute(
-        select(User).where(User.email == user_in.email)
-    )
-    if existing_email.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email ya existe")
-    
-    existing_username = await db.execute(
-        select(User).where(User.username == user_in.username)
-    )
-    if existing_username.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Username ya existe")
-    
-    # Crear usuario procesando el password correctamente
-    user_data = user_in.model_dump(exclude={'password'})  # Excluir password del dump
-    
-    # TODO: En producción, hashear el password con bcrypt
-    # from passlib.context import CryptContext
-    # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    # hashed_password = pwd_context.hash(user_in.password)
-    
-    # Por ahora, usar password simple (NO HACER EN PRODUCCIÓN)
-    user_data['hashed_password'] = f"hashed_{user_in.password}"
-    
-    user = User(**user_data)
-    
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    
-    return UserSchema(
-        **user.__dict__,
-        current_projects=[]
-    )
+    """Crear un nuevo usuario"""
+    try:
+        return await user_service.create_user(user_in)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{user_id}", response_model=UserSchema)
 async def get_user(
     user_id: int,
-    db: AsyncSession = Depends(get_db)
+    user_service: UserService = Depends(get_user_service)
 ):
-    """
-    Obtener un usuario por ID
-    """
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    return UserSchema(
-        **user.__dict__,
-        current_projects=[]
-    )
+    """Obtener un usuario por ID"""
+    try:
+        user = await user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{user_id}", response_model=UserSchema)
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
-    db: AsyncSession = Depends(get_db)
+    user_service: UserService = Depends(get_user_service)
 ):
-    """
-    Actualizar un usuario
-    """
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    # Actualizar campos (excluyendo password por ahora)
-    update_data = user_update.model_dump(exclude_unset=True, exclude={'password'})
-    for field, value in update_data.items():
-        setattr(user, field, value)
-    
-    # Manejar password por separado si se proporciona
-    if user_update.password:
-        user.hashed_password = f"hashed_{user_update.password}"
-    
-    await db.commit()
-    await db.refresh(user)
-    
-    return UserSchema(
-        **user.__dict__,
-        current_projects=[]
-    )
+    """Actualizar un usuario"""
+    try:
+        updated_user = await user_service.update_user(user_id, user_update)
+        return updated_user
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: int,
-    db: AsyncSession = Depends(get_db)
+    user_service: UserService = Depends(get_user_service)
 ):
-    """
-    Eliminar un usuario
-    """
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    await db.delete(user)
-    await db.commit()
-    
-    return {"message": "Usuario eliminado exitosamente"}
+    """Eliminar un usuario"""
+    try:
+        success = await user_service.delete_user(user_id)
+        return {"message": "Usuario eliminado exitosamente"}
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
