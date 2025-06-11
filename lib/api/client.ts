@@ -26,7 +26,10 @@ class ApiClient {
       const response = await fetch(url, config)
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Mejorar el error para debug
+        const errorText = await response.text()
+        console.error(`API Error ${response.status}:`, errorText)
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
@@ -213,7 +216,16 @@ class ApiClient {
     })
   }
 
-  // Métodos para Tecnologías
+  // Métodos para Tecnologías (manteniendo compatibilidad con guión bajo)
+  async getTechnologies(params?: {
+    skip?: number
+    limit?: number
+    category?: string
+    search?: string
+  }) {
+    return this.get_technologies(params)
+  }
+
   async get_technologies(params?: {
     skip?: number
     limit?: number
@@ -230,8 +242,20 @@ class ApiClient {
     return this.request(`/api/technologies${query ? `?${query}` : ''}`)
   }
 
+  async getTechnology(id: number) {
+    return this.get_technology(id)
+  }
+
   async get_technology(id: number) {
     return this.request(`/api/technologies/${id}`)
+  }
+
+  async createTechnology(data: {
+    name: string
+    category: string
+    description?: string
+  }) {
+    return this.create_technology(data)
   }
 
   async create_technology(data: {
@@ -245,6 +269,14 @@ class ApiClient {
     })
   }
 
+  async updateTechnology(id: number, data: {
+    name?: string
+    category?: string
+    description?: string
+  }) {
+    return this.update_technology(id, data)
+  }
+
   async update_technology(id: number, data: {
     name?: string
     category?: string
@@ -254,6 +286,10 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(data),
     })
+  }
+
+  async deleteTechnology(id: number) {
+    return this.delete_technology(id)
   }
 
   async delete_technology(id: number) {

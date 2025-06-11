@@ -10,6 +10,27 @@ class ProjectService:
         self.repository = ProjectRepository(db)
         self.db = db
 
+    def _build_project_schema(self, project: Project) -> ProjectSchema:
+        """Construir schema de proyecto evitando conflictos con relaciones"""
+        project_dict = {
+            'id': project.id,
+            'name': project.name,
+            'description': project.description,
+            'client_name': project.client_name,
+            'status': project.status,
+            'start_date': project.start_date,
+            'end_date': project.end_date,
+            'budget': project.budget,
+            'hourly_rate': project.hourly_rate,
+            'created_at': project.created_at,
+            'updated_at': project.updated_at,
+            'members': [],
+            'technologies': [],
+            'total_hours': 0,
+            'total_invoiced': 0
+        }
+        return ProjectSchema(**project_dict)
+
     async def create_project(self, project_data: ProjectCreate) -> ProjectSchema:
         """Crear nuevo proyecto"""
         print(f"🔍 Datos recibidos: {project_data}")
@@ -33,13 +54,7 @@ class ProjectService:
             
             print(f"✅ Proyecto creado: {project}")
             
-            return ProjectSchema(
-                **project.__dict__,
-                members=[],
-                technologies=[],
-                total_hours=0,
-                total_invoiced=0
-            )
+            return self._build_project_schema(project)
             
         except Exception as e:
             print(f"❌ Error en create_project: {e}")
@@ -63,13 +78,7 @@ class ProjectService:
         
         project_schemas = []
         for project in projects:
-            project_schemas.append(ProjectSchema(
-                **project.__dict__,
-                members=[],
-                technologies=[],
-                total_hours=0,
-                total_invoiced=0
-            ))
+            project_schemas.append(self._build_project_schema(project))
         
         return ProjectList(total=total, projects=project_schemas)
 
@@ -79,13 +88,7 @@ class ProjectService:
         if not project:
             return None
         
-        return ProjectSchema(
-            **project.__dict__,
-            members=[],
-            technologies=[],
-            total_hours=0,
-            total_invoiced=0
-        )
+        return self._build_project_schema(project)
 
     async def update_project(self, project_id: int, project_data: ProjectUpdate) -> Optional[ProjectSchema]:
         """Actualizar proyecto"""
@@ -97,13 +100,7 @@ class ProjectService:
         update_dict = project_data.model_dump(exclude_unset=True, exclude={'member_ids', 'technology_ids'})
         updated_project = await self.repository.update(project_id, update_dict)
         
-        return ProjectSchema(
-            **updated_project.__dict__,
-            members=[],
-            technologies=[],
-            total_hours=0,
-            total_invoiced=0
-        )
+        return self._build_project_schema(updated_project)
 
     async def delete_project(self, project_id: int) -> bool:
         """Eliminar proyecto"""

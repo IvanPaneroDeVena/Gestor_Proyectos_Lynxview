@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
-from app.db.base import get_db
-from app.models import TimeEntry, User, Project, Task
+from app.services.time_entry_service import TimeEntryService
+from app.dependencies import get_time_entry_service
 from app.schemas.timeEntry import (
     TimeEntry as TimeEntrySchema,
     TimeEntryCreate,
     TimeEntryUpdate,
     TimeEntryList
 )
+from app.exceptions import NotFoundException, ValidationException
 
 router = APIRouter()
 
@@ -25,191 +24,117 @@ async def get_time_entries(
     billed: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: AsyncSession = Depends(get_db)
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
 ):
-    """
-    Obtener lista de entradas de tiempo con paginación y filtros
-    """
-    # Query base
-    query = select(TimeEntry)
-    count_query = select(func.count(TimeEntry.id))
-    
-    # Aplicar filtros
-    if user_id:
-        query = query.where(TimeEntry.user_id == user_id)
-        count_query = count_query.where(TimeEntry.user_id == user_id)
-    
-    if project_id:
-        query = query.where(TimeEntry.project_id == project_id)
-        count_query = count_query.where(TimeEntry.project_id == project_id)
-    
-    if task_id:
-        query = query.where(TimeEntry.task_id == task_id)
-        count_query = count_query.where(TimeEntry.task_id == task_id)
-    
-    if billable:
-        query = query.where(TimeEntry.billable == billable)
-        count_query = count_query.where(TimeEntry.billable == billable)
-    
-    if billed:
-        query = query.where(TimeEntry.billed == billed)
-        count_query = count_query.where(TimeEntry.billed == billed)
-    
-    if start_date:
-        query = query.where(TimeEntry.date >= start_date)
-        count_query = count_query.where(TimeEntry.date >= start_date)
-    
-    if end_date:
-        query = query.where(TimeEntry.date <= end_date)
-        count_query = count_query.where(TimeEntry.date <= end_date)
-    
-    # Obtener total
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Aplicar paginación
-    query = query.offset(skip).limit(limit).order_by(TimeEntry.date.desc())
-    
-    # Ejecutar query
-    result = await db.execute(query)
-    time_entries = result.scalars().all()
-    
-    return TimeEntryList(
-        total=total,
-        time_entries=[
-            TimeEntrySchema(
-                **time_entry.__dict__,
-                user=None,
-                project=None,
-                task=None
-            ) for time_entry in time_entries
-        ]
-    )
+    """Obtener lista de entradas de tiempo con paginación y filtros"""
+    try:
+        return await time_entry_service.search_time_entries(
+            user_id=user_id,
+            project_id=project_id,
+            task_id=task_id,
+            billable=billable,
+            billed=billed,
+            start_date=start_date,
+            end_date=end_date,
+            skip=skip,
+            limit=limit
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=TimeEntrySchema)
 async def create_time_entry(
     time_entry_in: TimeEntryCreate,
-    db: AsyncSession = Depends(get_db)
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
 ):
-    """
-    Crear una nueva entrada de tiempo
-    """
-    # Verificar que el usuario existe
-    user_result = await db.execute(
-        select(User).where(User.id == time_entry_in.user_id)
-    )
-    if not user_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    # Verificar que el proyecto existe
-    project_result = await db.execute(
-        select(Project).where(Project.id == time_entry_in.project_id)
-    )
-    if not project_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    
-    # Verificar que la tarea existe (si se proporciona)
-    if time_entry_in.task_id:
-        task_result = await db.execute(
-            select(Task).where(Task.id == time_entry_in.task_id)
-        )
-        if not task_result.scalar_one_or_none():
-            raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    
-    # Crear instancia de la entrada de tiempo
-    time_entry = TimeEntry(**time_entry_in.model_dump())
-    
-    db.add(time_entry)
-    await db.commit()
-    await db.refresh(time_entry)
-    
-    return TimeEntrySchema(
-        **time_entry.__dict__,
-        user=None,
-        project=None,
-        task=None
-    )
+    """Crear una nueva entrada de tiempo"""
+    try:
+        return await time_entry_service.create_time_entry(time_entry_in)
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{time_entry_id}", response_model=TimeEntrySchema)
 async def get_time_entry(
     time_entry_id: int,
-    db: AsyncSession = Depends(get_db)
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
 ):
-    """
-    Obtener una entrada de tiempo por ID
-    """
-    result = await db.execute(
-        select(TimeEntry).where(TimeEntry.id == time_entry_id)
-    )
-    time_entry = result.scalar_one_or_none()
-    
-    if not time_entry:
-        raise HTTPException(status_code=404, detail="Entrada de tiempo no encontrada")
-    
-    return TimeEntrySchema(
-        **time_entry.__dict__,
-        user=None,
-        project=None,
-        task=None
-    )
+    """Obtener una entrada de tiempo por ID"""
+    try:
+        time_entry = await time_entry_service.get_time_entry_by_id(time_entry_id)
+        if not time_entry:
+            raise HTTPException(status_code=404, detail="Entrada de tiempo no encontrada")
+        return time_entry
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{time_entry_id}", response_model=TimeEntrySchema)
 async def update_time_entry(
     time_entry_id: int,
     time_entry_update: TimeEntryUpdate,
-    db: AsyncSession = Depends(get_db)
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
 ):
-    """
-    Actualizar una entrada de tiempo
-    """
-    result = await db.execute(
-        select(TimeEntry).where(TimeEntry.id == time_entry_id)
-    )
-    time_entry = result.scalar_one_or_none()
-    
-    if not time_entry:
-        raise HTTPException(status_code=404, detail="Entrada de tiempo no encontrada")
-    
-    # Verificar que la tarea existe (si se proporciona)
-    if time_entry_update.task_id:
-        task_result = await db.execute(
-            select(Task).where(Task.id == time_entry_update.task_id)
-        )
-        if not task_result.scalar_one_or_none():
-            raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    
-    # Actualizar campos
-    update_data = time_entry_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(time_entry, field, value)
-    
-    await db.commit()
-    await db.refresh(time_entry)
-    
-    return TimeEntrySchema(
-        **time_entry.__dict__,
-        user=None,
-        project=None,
-        task=None
-    )
+    """Actualizar una entrada de tiempo"""
+    try:
+        updated_entry = await time_entry_service.update_time_entry(time_entry_id, time_entry_update)
+        return updated_entry
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{time_entry_id}")
 async def delete_time_entry(
     time_entry_id: int,
-    db: AsyncSession = Depends(get_db)
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
 ):
-    """
-    Eliminar una entrada de tiempo
-    """
-    result = await db.execute(
-        select(TimeEntry).where(TimeEntry.id == time_entry_id)
-    )
-    time_entry = result.scalar_one_or_none()
-    
-    if not time_entry:
-        raise HTTPException(status_code=404, detail="Entrada de tiempo no encontrada")
-    
-    await db.delete(time_entry)
-    await db.commit()
-    
-    return {"message": "Entrada de tiempo eliminada exitosamente"}
+    """Eliminar una entrada de tiempo"""
+    try:
+        success = await time_entry_service.delete_time_entry(time_entry_id)
+        return {"message": "Entrada de tiempo eliminada exitosamente"}
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoints adicionales útiles
+@router.get("/user/{user_id}/entries")
+async def get_user_time_entries(
+    user_id: int,
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
+):
+    """Obtener entradas de tiempo de un usuario específico"""
+    try:
+        entries = await time_entry_service.get_user_time_entries(user_id)
+        return {"entries": entries}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/project/{project_id}/entries")
+async def get_project_time_entries(
+    project_id: int,
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
+):
+    """Obtener entradas de tiempo de un proyecto específico"""
+    try:
+        entries = await time_entry_service.get_project_time_entries(project_id)
+        return {"entries": entries}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/project/{project_id}/hours-summary")
+async def get_project_hours_summary(
+    project_id: int,
+    time_entry_service: TimeEntryService = Depends(get_time_entry_service)
+):
+    """Obtener resumen de horas de un proyecto"""
+    try:
+        summary = await time_entry_service.get_project_hours_summary(project_id)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

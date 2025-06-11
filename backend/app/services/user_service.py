@@ -10,6 +10,26 @@ class UserService:
         self.repository = UserRepository(db)
         self.db = db
 
+    def _build_user_schema(self, user: User) -> UserSchema:
+        """Construir schema de usuario evitando conflictos con relaciones"""
+        user_dict = {
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'full_name': user.full_name,
+            'role': user.role,
+            'seniority': user.seniority,
+            'department': user.department,
+            'hourly_rate': user.hourly_rate,
+            'skills': user.skills,
+            'is_active': user.is_active,
+            'created_at': user.created_at,
+            'updated_at': user.updated_at,
+            'last_login': user.last_login,
+            'current_projects': []  # TODO: Obtener proyectos actuales
+        }
+        return UserSchema(**user_dict)
+
     async def search_users(
         self,
         search: Optional[str] = None,
@@ -28,12 +48,7 @@ class UserService:
         )
         
         # Transformar a esquemas de respuesta
-        user_schemas = [
-            UserSchema(
-                **user.__dict__,
-                current_projects=[]  # TODO: Obtener proyectos actuales
-            ) for user in users
-        ]
+        user_schemas = [self._build_user_schema(user) for user in users]
         
         return UserList(total=total, users=user_schemas)
 
@@ -55,10 +70,7 @@ class UserService:
             user = await self.repository.create(user_dict)
             print(f"✅ Usuario creado: {user}")
             
-            return UserSchema(
-                **user.__dict__,
-                current_projects=[]
-            )
+            return self._build_user_schema(user)
             
         except Exception as e:
             print(f"❌ Error en create_user: {e}")
@@ -70,10 +82,7 @@ class UserService:
         if not user:
             return None
         
-        return UserSchema(
-            **user.__dict__,
-            current_projects=[]
-        )
+        return self._build_user_schema(user)
 
     async def update_user(self, user_id: int, user_data: UserUpdate) -> Optional[UserSchema]:
         """Actualizar usuario con validaciones"""
@@ -93,10 +102,7 @@ class UserService:
         # Actualizar
         updated_user = await self.repository.update(user_id, update_dict)
         
-        return UserSchema(
-            **updated_user.__dict__,
-            current_projects=[]
-        )
+        return self._build_user_schema(updated_user)
 
     async def delete_user(self, user_id: int) -> bool:
         """Eliminar usuario"""
@@ -109,12 +115,7 @@ class UserService:
     async def get_users_by_role(self, role: str) -> List[UserSchema]:
         """Obtener usuarios activos por rol"""
         users = await self.repository.get_active_users_by_role(role)
-        return [
-            UserSchema(
-                **user.__dict__,
-                current_projects=[]
-            ) for user in users
-        ]
+        return [self._build_user_schema(user) for user in users]
 
     # Métodos privados para validaciones
     async def _validate_user_creation(self, user_data: UserCreate):

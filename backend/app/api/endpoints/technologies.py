@@ -1,16 +1,15 @@
 # backend/app/api/endpoints/technologies.py
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Optional
-from app.db.base import get_db
-from app.models import Technology
+from typing import Optional
+from app.services.technology_service import TechnologyService
+from app.dependencies import get_technology_service
 from app.schemas.technology import (
     Technology as TechnologySchema,
     TechnologyCreate,
     TechnologyUpdate,
     TechnologyList
 )
+from app.exceptions import NotFoundException, ValidationException
 
 router = APIRouter()
 
@@ -20,147 +19,84 @@ async def get_technologies(
     limit: int = Query(100, ge=1, le=500),  # Límite más alto porque hay pocas tecnologías
     category: Optional[str] = None,
     search: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    technology_service: TechnologyService = Depends(get_technology_service)
 ):
-    """
-    Obtener lista de tecnologías con filtros
-    """
-    # Query base
-    query = select(Technology)
-    count_query = select(func.count(Technology.id))
-    
-    # Aplicar filtros
-    if category:
-        query = query.where(Technology.category == category)
-        count_query = count_query.where(Technology.category == category)
-    
-    if search:
-        search_filter = f"%{search}%"
-        query = query.where(
-            (Technology.name.ilike(search_filter)) |
-            (Technology.description.ilike(search_filter))
+    """Obtener lista de tecnologías con filtros"""
+    try:
+        return await technology_service.search_technologies(
+            search=search,
+            category=category,
+            skip=skip,
+            limit=limit
         )
-        count_query = count_query.where(
-            (Technology.name.ilike(search_filter)) |
-            (Technology.description.ilike(search_filter))
-        )
-    
-    # Obtener total
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-    
-    # Aplicar paginación y ordenar por nombre
-    query = query.offset(skip).limit(limit).order_by(Technology.category, Technology.name)
-    
-    # Ejecutar query
-    result = await db.execute(query)
-    technologies = result.scalars().all()
-    
-    return TechnologyList(
-        total=total,
-        technologies=[
-            TechnologySchema(**tech.__dict__) for tech in technologies
-        ]
-    )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=TechnologySchema)
 async def create_technology(
     technology_in: TechnologyCreate,
-    db: AsyncSession = Depends(get_db)
+    technology_service: TechnologyService = Depends(get_technology_service)
 ):
-    """
-    Crear una nueva tecnología
-    """
-    # Verificar que el nombre sea único
-    existing = await db.execute(
-        select(Technology).where(Technology.name == technology_in.name)
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Tecnología ya existe")
-    
-    # Crear tecnología
-    technology = Technology(**technology_in.model_dump())
-    
-    db.add(technology)
-    await db.commit()
-    await db.refresh(technology)
-    
-    return TechnologySchema(**technology.__dict__)
+    """Crear una nueva tecnología"""
+    try:
+        return await technology_service.create_technology(technology_in)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{technology_id}", response_model=TechnologySchema)
 async def get_technology(
     technology_id: int,
-    db: AsyncSession = Depends(get_db)
+    technology_service: TechnologyService = Depends(get_technology_service)
 ):
-    """
-    Obtener una tecnología por ID
-    """
-    result = await db.execute(
-        select(Technology).where(Technology.id == technology_id)
-    )
-    technology = result.scalar_one_or_none()
-    
-    if not technology:
-        raise HTTPException(status_code=404, detail="Tecnología no encontrada")
-    
-    return TechnologySchema(**technology.__dict__)
+    """Obtener una tecnología por ID"""
+    try:
+        technology = await technology_service.get_technology_by_id(technology_id)
+        if not technology:
+            raise HTTPException(status_code=404, detail="Tecnología no encontrada")
+        return technology
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{technology_id}", response_model=TechnologySchema)
 async def update_technology(
     technology_id: int,
     technology_update: TechnologyUpdate,
-    db: AsyncSession = Depends(get_db)
+    technology_service: TechnologyService = Depends(get_technology_service)
 ):
-    """
-    Actualizar una tecnología
-    """
-    result = await db.execute(
-        select(Technology).where(Technology.id == technology_id)
-    )
-    technology = result.scalar_one_or_none()
-    
-    if not technology:
-        raise HTTPException(status_code=404, detail="Tecnología no encontrada")
-    
-    # Actualizar campos
-    update_data = technology_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(technology, field, value)
-    
-    await db.commit()
-    await db.refresh(technology)
-    
-    return TechnologySchema(**technology.__dict__)
+    """Actualizar una tecnología"""
+    try:
+        updated_tech = await technology_service.update_technology(technology_id, technology_update)
+        return updated_tech
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except ValidationException as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{technology_id}")
 async def delete_technology(
     technology_id: int,
-    db: AsyncSession = Depends(get_db)
+    technology_service: TechnologyService = Depends(get_technology_service)
 ):
-    """
-    Eliminar una tecnología
-    """
-    result = await db.execute(
-        select(Technology).where(Technology.id == technology_id)
-    )
-    technology = result.scalar_one_or_none()
-    
-    if not technology:
-        raise HTTPException(status_code=404, detail="Tecnología no encontrada")
-    
-    await db.delete(technology)
-    await db.commit()
-    
-    return {"message": "Tecnología eliminada exitosamente"}
+    """Eliminar una tecnología"""
+    try:
+        success = await technology_service.delete_technology(technology_id)
+        return {"message": "Tecnología eliminada exitosamente"}
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/categories/list")
-async def get_technology_categories(db: AsyncSession = Depends(get_db)):
-    """
-    Obtener lista de categorías únicas
-    """
-    result = await db.execute(
-        select(Technology.category).distinct().where(Technology.category.isnot(None))
-    )
-    categories = [row[0] for row in result.fetchall()]
-    
-    return {"categories": categories}
+async def get_technology_categories(
+    technology_service: TechnologyService = Depends(get_technology_service)
+):
+    """Obtener lista de categorías únicas"""
+    try:
+        categories = await technology_service.get_categories()
+        return {"categories": categories}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
